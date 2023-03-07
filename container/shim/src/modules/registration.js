@@ -16,10 +16,11 @@ import {
 } from "../config.js";
 import { debug as Debug } from "../utils/logging.js";
 import { getCPUStats, getDiskStats, getMemoryStats, getNICStats, getSpeedtest } from "../utils/system.js";
-import { CERT_PATH, certExists, getNewTLSCert, SSL_PATH } from "./tls.js";
+import { backupCertExists, CERT_PATH, certExists, getNewTLSCert, SSL_PATH, swapCerts } from "./tls.js";
 import { parseVersionNumber } from "../utils/version.js";
 import { orchestratorAgent } from "../utils/http.js";
 import { prefillCache } from "../utils/prefill.js";
+import { check } from "../lib/ocsp/check.js";
 
 const debug = Debug.extend("registration");
 
@@ -90,7 +91,7 @@ export async function register(initial = false) {
   const registerOptions = postOptions(body);
 
   // If cert is not yet in the volume, register
-  if (!certExists) {
+  if (!certExists || (!backupCertExists && SATURN_NETWORK === "main")) {
     if (!(await fsPromises.stat(SSL_PATH).catch((_) => false))) {
       debug("Creating SSL folder");
       await fsPromises.mkdir(SSL_PATH, { recursive: true });
@@ -111,9 +112,9 @@ export async function register(initial = false) {
       process.exit(0);
     }
   } else {
-    if (initial) {
-      const certBuffer = await fsPromises.readFile(CERT_PATH);
+    const certBuffer = await fsPromises.readFile(CERT_PATH);
 
+    if (initial) {
       const cert = new X509Certificate(certBuffer);
 
       let valid = true;
@@ -136,6 +137,27 @@ export async function register(initial = false) {
         await getNewTLSCert(registerOptions);
         // we get the new cert and restart
         process.exit(1);
+      }
+    }
+
+    if (backupCertExists) {
+      const certString = certBuffer.toString();
+      const boundary = "-----END CERTIFICATE-----";
+      const boundaryIndex = certString.indexOf(boundary);
+      const cert = certString.substring(0, boundaryIndex + boundary.length);
+      const caCert = certString.substring(boundaryIndex + boundary.length + 1);
+
+      try {
+        const response = await check(cert, caCert);
+        if (response.type === "good") {
+          debug("OCSP status of certificate is good");
+        } else {
+          debug("OCSP status of certificate is not good %o", response);
+          await swapCerts();
+          process.exit(1);
+        }
+      } catch (err) {
+        debug(`Unable to verify OCSP status of certificate: ${err.name} ${err.message}`);
       }
     }
 
