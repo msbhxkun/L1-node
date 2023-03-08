@@ -40,7 +40,7 @@ sed -i "s@\$node_id@$(cat /usr/src/app/shared/nodeId.txt)@g" /etc/nginx/conf.d/s
 sed -i "s@\$node_version@$NODE_VERSION@g" /etc/nginx/conf.d/shared.conf
 
 min_uses=2
-if [ $(df -h /usr/src/app/shared | awk '(NR>1) { printf "%d", $5}') -lt 90 ]; then
+if [ $(df -h /usr/src/app/shared | awk '(NR>1) { printf "%d", $5}') -lt 80 ]; then
   min_uses=1;
 fi
 sed -i "s@\$cache_min_uses@$min_uses@g" /etc/nginx/conf.d/shared.conf
@@ -51,13 +51,13 @@ fi
 
 nginx
 
-export LASSIE_ORIGIN=http://127.0.0.1:7766
+export LASSIE_PORT=7766
+export LASSIE_ORIGIN=http://127.0.0.1:$LASSIE_PORT
 export LASSIE_EVENT_RECORDER_INSTANCE_ID="$(cat /usr/src/app/shared/nodeId.txt)"
 export LASSIE_TEMP_DIRECTORY=/usr/src/app/shared/lassie
 export LASSIE_MAX_BLOCKS_PER_REQUEST=10000
 export LASSIE_LIBP2P_CONNECTIONS_LOWWATER=2000
 export LASSIE_LIBP2P_CONNECTIONS_HIGHWATER=3000
-export LASSIE_PORT=7766
 export LASSIE_CONCURRENT_SP_RETRIEVALS=1
 export LASSIE_EXPOSE_METRICS=true
 export LASSIE_DISABLE_GRAPHSYNC=true
