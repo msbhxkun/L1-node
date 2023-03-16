@@ -108,11 +108,12 @@ RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
  && apt-get install --no-install-recommends -y \
  nodejs \
  speedtest \
+ logrotate \
  && rm -rf /var/lib/apt/lists/*
 
 # Download lassie
 ARG TARGETPLATFORM
-ARG LASSIE_VERSION="v0.5.0"
+ARG LASSIE_VERSION="v0.6.6"
 RUN if [ "$TARGETPLATFORM" = "linux/amd64" ]; then ARCHITECTURE=amd64; \
   elif [ "$TARGETPLATFORM" = "linux/arm64" ]; then ARCHITECTURE=arm64; \
   else ARCHITECTURE=386; fi \
@@ -123,13 +124,17 @@ RUN if [ "$TARGETPLATFORM" = "linux/amd64" ]; then ARCHITECTURE=amd64; \
 WORKDIR /usr/src/app
 # copy the package.json files from local machine to the workdir in container
 COPY container/shim/package*.json ./
-# run npm install in our local machine
+# run npm install to install all the dependencies for the shim
 RUN npm ci --production --ignore-scripts
 
 # copy the generated modules and all other files to the container
 COPY container/start.sh ./
 COPY container/shim ./
 COPY container/nginx /etc/nginx/
+COPY container/logrotate/* /etc/logrotate.d/
+
+# Load CIDs ban lists
+RUN rm /etc/nginx/conf.d/default.conf && curl -s https://badbits.dwebops.pub/denylist.json > /etc/nginx/denylist.json
 
 ARG RUN_NUMBER="0"
 ARG GIT_COMMIT_HASH="dev"
@@ -137,9 +142,6 @@ ARG SATURN_NETWORK="local"
 ARG ORCHESTRATOR_URL
 ARG LASSIE_EVENT_RECORDER_AUTH
 ARG LASSIE_EVENT_RECORDER_URL
-
-# Load CIDs ban lists
-RUN rm /etc/nginx/conf.d/default.conf && curl -s https://badbits.dwebops.pub/denylist.json > /etc/nginx/denylist.json
 
 # need nginx to find the openssl libs
 ENV LD_LIBRARY_PATH=/usr/lib/nginx/modules
